@@ -2,7 +2,10 @@ use eframe::egui;
 use log::{error, info, trace, warn};
 use octocrab::{self, models::repos::Release};
 use pretty_env_logger;
+use reqwest::Url;
 use std::fs::DirBuilder;
+use std::fs::File;
+use std::io::copy;
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -69,8 +72,16 @@ impl eframe::App for LauncherApp {
                     .iter()
                     .find(|asset| asset.name == "linux-latest.zip".to_string())
                 {
-                    trace!("Found asset with download link: {}", asset.url);
+                    trace!(
+                        "Found asset with download link: {}",
+                        asset.browser_download_url
+                    );
                     create_game_dir("twelve-knights".to_string()).unwrap();
+
+                    let target = asset.browser_download_url.clone();
+                    tokio::spawn(async move {
+                        download_game(target).await;
+                    });
                 } else {
                     error!("Could not find a valid asset.");
                 }
@@ -91,6 +102,28 @@ fn create_game_dir(game_id: String) -> Result<(), std::io::Error> {
     path.push(game_id);
 
     dir_builder.create(path)?;
+
+    Ok(())
+}
+
+fn get_game_dir(game_id: String) -> PathBuf {
+    let mut path = get_data_dir();
+    path.push(game_id);
+    path
+}
+
+async fn download_game(url: Url) -> Result<(), Box<dyn std::error::Error>> {
+    let response = reqwest::get(url).await?;
+    let mut dest = {
+        let mut fname = get_game_dir("twelve-knights".to_string());
+        fname.push("linux-latest.zip");
+        println!("File will be downloaded to {}", fname.as_path().display());
+
+        File::create(fname)?
+    };
+
+    let content = response.bytes().await?;
+    copy(&mut content.as_ref(), &mut dest)?;
 
     Ok(())
 }
