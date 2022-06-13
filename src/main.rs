@@ -1,16 +1,33 @@
 use eframe::egui;
-use log::{info, trace, warn};
+use log::{error, info, trace, warn};
 use octocrab::{self, models::repos::Release};
 use pretty_env_logger;
+use std::fs::DirBuilder;
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
+    create_data_dir();
     let options = eframe::NativeOptions::default();
 
     let mut app = LauncherApp::new().await?;
 
     eframe::run_native("Arcana Launcher", options, Box::new(|_cc| Box::new(app)));
+}
+
+fn create_data_dir() {
+    let mut dir_builder = DirBuilder::new();
+    dir_builder.recursive(true);
+    dir_builder.create(get_data_dir().as_path()).unwrap();
+}
+
+fn get_data_dir() -> PathBuf {
+    let mut path = dirs::data_local_dir().unwrap();
+
+    path.push("arcana-launcher");
+
+    path
 }
 
 struct LauncherApp {
@@ -44,7 +61,36 @@ impl eframe::App for LauncherApp {
                 "Last Update: {}",
                 self.latest_twelve_knights.published_at.unwrap()
             ));
-            if ui.button("Play").clicked() {}
+            if ui.button("Download").clicked() {
+                trace!("Finding correct download link.");
+                if let Some(asset) = self
+                    .latest_twelve_knights
+                    .assets
+                    .iter()
+                    .find(|asset| asset.name == "linux-latest.zip".to_string())
+                {
+                    trace!("Found asset with download link: {}", asset.url);
+                    create_game_dir("twelve-knights".to_string()).unwrap();
+                } else {
+                    error!("Could not find a valid asset.");
+                }
+            }
+
+            if ui.button("Play").clicked() {
+                error!("NOT IMPLEMENTED");
+            }
         });
     }
+}
+
+fn create_game_dir(game_id: String) -> Result<(), std::io::Error> {
+    let mut dir_builder = DirBuilder::new();
+    dir_builder.recursive(true);
+
+    let mut path = get_data_dir();
+    path.push(game_id);
+
+    dir_builder.create(path)?;
+
+    Ok(())
 }
