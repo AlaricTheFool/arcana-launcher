@@ -94,7 +94,8 @@ impl eframe::App for LauncherApp {
                 let mut executable = working_dir.clone();
                 executable.push("twelve-knights-vigil");
                 Command::new(executable)
-                    .current_dir(working_dir)
+                    .current_dir(working_dir.clone())
+                    .env("CARGO_MANIFEST_DIR", working_dir.clone())
                     .spawn()
                     .expect("Failed to launch game");
             }
