@@ -7,6 +7,7 @@ use std::fs::DirBuilder;
 use std::fs::File;
 use std::io::copy;
 use std::path::PathBuf;
+use std::process::Command;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,7 +89,14 @@ impl eframe::App for LauncherApp {
             }
 
             if ui.button("Play").clicked() {
-                error!("NOT IMPLEMENTED");
+                let mut working_dir = get_game_dir("twelve-knights".to_string());
+                working_dir.push("linux-latest");
+                let mut executable = working_dir.clone();
+                executable.push("twelve-knights-vigil");
+                Command::new(executable)
+                    .current_dir(working_dir)
+                    .spawn()
+                    .expect("Failed to launch game");
             }
         });
     }
@@ -114,16 +122,58 @@ fn get_game_dir(game_id: String) -> PathBuf {
 
 async fn download_game(url: Url) -> Result<(), Box<dyn std::error::Error>> {
     let response = reqwest::get(url).await?;
-    let mut dest = {
-        let mut fname = get_game_dir("twelve-knights".to_string());
-        fname.push("linux-latest.zip");
-        println!("File will be downloaded to {}", fname.as_path().display());
+    let mut fname = get_game_dir("twelve-knights".to_string());
+    fname.push("linux-latest.zip");
 
-        File::create(fname)?
-    };
+    println!("File will be downloaded to {}", fname.as_path().display());
+    let mut zip_file = File::create(fname.clone())?;
 
     let content = response.bytes().await?;
-    copy(&mut content.as_ref(), &mut dest)?;
+    copy(&mut content.as_ref(), &mut zip_file)?;
+
+    info!("Finished Download!");
+    info!("Beginning Extraction...");
+
+    let file = std::fs::File::open(fname.clone())?;
+    let mut archive = zip::ZipArchive::new(&file).unwrap();
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).unwrap();
+        let outpath = match file.enclosed_name() {
+            Some(path) => get_game_dir("twelve-knights".to_string()).join(path.to_owned()),
+            None => continue,
+        };
+
+        if (*file.name()).ends_with('/') {
+            info!("File {} extracted to \"{}\"", i, outpath.display());
+            std::fs::create_dir_all(&outpath).unwrap();
+        } else {
+            info!(
+                "File {} extracted to \"{}\" ({} bytes)",
+                i,
+                outpath.display(),
+                file.size()
+            );
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    std::fs::create_dir_all(&p).unwrap();
+                }
+            }
+
+            let mut outfile = std::fs::File::create(&outpath).unwrap();
+            copy(&mut file, &mut outfile).unwrap();
+        }
+
+        // Get and Set Permissions
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            if let Some(mode) = file.unix_mode() {
+                std::fs::set_permissions(&outpath, std::fs::Permissions::from_mode(mode)).unwrap();
+            }
+        }
+    }
 
     Ok(())
 }
