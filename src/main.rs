@@ -1,13 +1,20 @@
-use eframe::egui;
-use log::{error, info, trace, warn};
-use octocrab::{self, models::repos::Release};
-use pretty_env_logger;
-use reqwest::Url;
-use std::fs::DirBuilder;
-use std::fs::File;
-use std::io::copy;
-use std::path::PathBuf;
-use std::process::Command;
+mod file_management;
+
+mod prelude {
+    pub use crate::file_management::*;
+    pub use eframe::egui;
+    pub use log::{error, info, trace, warn};
+    pub use octocrab::{self, models::repos::Release};
+    pub use pretty_env_logger;
+    pub use reqwest::Url;
+    pub use std::fs::DirBuilder;
+    pub use std::fs::File;
+    pub use std::io::copy;
+    pub use std::path::PathBuf;
+    pub use std::process::Command;
+}
+
+use prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,22 +27,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     eframe::run_native("Arcana Launcher", options, Box::new(|_cc| Box::new(app)));
 }
 
-fn create_data_dir() {
-    let mut dir_builder = DirBuilder::new();
-    dir_builder.recursive(true);
-    dir_builder.create(get_data_dir().as_path()).unwrap();
-}
-
-fn get_data_dir() -> PathBuf {
-    let mut path = dirs::data_local_dir().unwrap();
-
-    path.push("arcana-launcher");
-
-    path
-}
-
 struct LauncherApp {
     latest_twelve_knights: Release,
+    download_status: Option<DownloadStatus>,
+}
+
+#[derive(PartialEq)]
+enum DownloadStatus {
+    Downloading,
+    Extracting,
 }
 
 impl LauncherApp {
@@ -43,6 +43,7 @@ impl LauncherApp {
         let release = Self::get_latest_twelve_knights().await?;
         Ok(Self {
             latest_twelve_knights: release,
+            download_status: None,
         })
     }
 
@@ -65,19 +66,24 @@ impl eframe::App for LauncherApp {
                 "Last Update: {}",
                 self.latest_twelve_knights.published_at.unwrap()
             ));
-            if ui.button("Download").clicked() {
+
+            let download_button = egui::Button::new("Download");
+            if ui
+                .add_enabled(self.download_status == None, download_button)
+                .clicked()
+            {
                 trace!("Finding correct download link.");
                 if let Some(asset) = self
                     .latest_twelve_knights
                     .assets
                     .iter()
-                    .find(|asset| asset.name == "linux-latest.zip".to_string())
+                    .find(|asset| asset.name == get_download_name_for_os())
                 {
                     trace!(
                         "Found asset with download link: {}",
                         asset.browser_download_url
                     );
-                    create_game_dir("twelve-knights".to_string()).unwrap();
+                    create_game_dir("twelve-knights-vigil".to_string()).unwrap();
 
                     let target = asset.browser_download_url.clone();
                     tokio::spawn(async move {
@@ -88,11 +94,16 @@ impl eframe::App for LauncherApp {
                 }
             }
 
-            if ui.button("Play").clicked() {
-                let mut working_dir = get_game_dir("twelve-knights".to_string());
-                working_dir.push("linux-latest");
-                let mut executable = working_dir.clone();
-                executable.push("twelve-knights-vigil");
+            let play_button = egui::Button::new("Play");
+            let file_exists =
+                std::path::Path::new(&get_os_executable("twelve-knights-vigil".to_string()))
+                    .exists();
+            if ui
+                .add_enabled(file_exists && self.download_status == None, play_button)
+                .clicked()
+            {
+                let working_dir = get_os_working_dir("twelve-knights-vigil".to_string());
+                let executable = get_os_executable("twelve-knights-vigil".to_string());
                 Command::new(executable)
                     .current_dir(working_dir.clone())
                     .env("CARGO_MANIFEST_DIR", working_dir.clone())
@@ -103,28 +114,10 @@ impl eframe::App for LauncherApp {
     }
 }
 
-fn create_game_dir(game_id: String) -> Result<(), std::io::Error> {
-    let mut dir_builder = DirBuilder::new();
-    dir_builder.recursive(true);
-
-    let mut path = get_data_dir();
-    path.push(game_id);
-
-    dir_builder.create(path)?;
-
-    Ok(())
-}
-
-fn get_game_dir(game_id: String) -> PathBuf {
-    let mut path = get_data_dir();
-    path.push(game_id);
-    path
-}
-
 async fn download_game(url: Url) -> Result<(), Box<dyn std::error::Error>> {
     let response = reqwest::get(url).await?;
-    let mut fname = get_game_dir("twelve-knights".to_string());
-    fname.push("linux-latest.zip");
+    let mut fname = get_game_dir("twelve-knights-vigil".to_string());
+    fname.push(get_download_name_for_os());
 
     println!("File will be downloaded to {}", fname.as_path().display());
     let mut zip_file = File::create(fname.clone())?;
@@ -141,7 +134,7 @@ async fn download_game(url: Url) -> Result<(), Box<dyn std::error::Error>> {
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).unwrap();
         let outpath = match file.enclosed_name() {
-            Some(path) => get_game_dir("twelve-knights".to_string()).join(path.to_owned()),
+            Some(path) => get_game_dir("twelve-knights-vigil".to_string()).join(path.to_owned()),
             None => continue,
         };
 
