@@ -62,54 +62,65 @@ impl eframe::App for LauncherApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Welcome!");
 
-            ui.label(format!(
-                "Last Update: {}",
-                self.latest_twelve_knights.published_at.unwrap()
-            ));
+            const BOTTOM_ROW_HEIGHT: f32 = 64.0;
+            const BUTTON_WIDTH: f32 = 128.0;
 
-            let download_button = egui::Button::new("Download");
-            if ui
-                .add_enabled(self.download_status == None, download_button)
-                .clicked()
-            {
-                trace!("Finding correct download link.");
-                if let Some(asset) = self
-                    .latest_twelve_knights
-                    .assets
-                    .iter()
-                    .find(|asset| asset.name == get_download_name_for_os())
-                {
-                    trace!(
-                        "Found asset with download link: {}",
-                        asset.browser_download_url
-                    );
-                    create_game_dir("twelve-knights-vigil".to_string()).unwrap();
+            ui.add_space(ui.available_height() - BOTTOM_ROW_HEIGHT);
 
-                    let target = asset.browser_download_url.clone();
-                    tokio::spawn(async move {
-                        download_game(target).await;
-                    });
-                } else {
-                    error!("Could not find a valid asset.");
-                }
-            }
+            ui.with_layout(egui::Layout::right_to_left(), |ui| {
+                let file_exists =
+                    std::path::Path::new(&get_os_executable("twelve-knights-vigil".to_string()))
+                        .exists();
+                ui.add_enabled_ui(file_exists && self.download_status == None, |ui| {
+                    let play_button = egui::Button::new("Play");
+                    if ui
+                        .add_sized([BUTTON_WIDTH, BOTTOM_ROW_HEIGHT], play_button)
+                        .clicked()
+                    {
+                        let working_dir = get_os_working_dir("twelve-knights-vigil".to_string());
+                        let executable = get_os_executable("twelve-knights-vigil".to_string());
+                        Command::new(executable)
+                            .current_dir(working_dir.clone())
+                            .env("CARGO_MANIFEST_DIR", working_dir.clone())
+                            .spawn()
+                            .expect("Failed to launch game");
+                    }
+                });
 
-            let play_button = egui::Button::new("Play");
-            let file_exists =
-                std::path::Path::new(&get_os_executable("twelve-knights-vigil".to_string()))
-                    .exists();
-            if ui
-                .add_enabled(file_exists && self.download_status == None, play_button)
-                .clicked()
-            {
-                let working_dir = get_os_working_dir("twelve-knights-vigil".to_string());
-                let executable = get_os_executable("twelve-knights-vigil".to_string());
-                Command::new(executable)
-                    .current_dir(working_dir.clone())
-                    .env("CARGO_MANIFEST_DIR", working_dir.clone())
-                    .spawn()
-                    .expect("Failed to launch game");
-            }
+                ui.add_enabled_ui(self.download_status == None, |ui| {
+                    let download_button = egui::Button::new("Download");
+                    if ui
+                        .add_sized([BUTTON_WIDTH, BOTTOM_ROW_HEIGHT], download_button)
+                        .clicked()
+                    {
+                        trace!("Finding correct download link.");
+                        if let Some(asset) = self
+                            .latest_twelve_knights
+                            .assets
+                            .iter()
+                            .find(|asset| asset.name == get_download_name_for_os())
+                        {
+                            trace!(
+                                "Found asset with download link: {}",
+                                asset.browser_download_url
+                            );
+                            create_game_dir("twelve-knights-vigil".to_string()).unwrap();
+
+                            let target = asset.browser_download_url.clone();
+                            tokio::spawn(async move {
+                                download_game(target).await;
+                            });
+                        } else {
+                            error!("Could not find a valid asset.");
+                        }
+                    }
+                });
+
+                ui.label(format!(
+                    "Last Update: {}",
+                    self.latest_twelve_knights.published_at.unwrap()
+                ));
+            });
         });
     }
 }
