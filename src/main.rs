@@ -20,7 +20,6 @@ mod prelude {
 }
 
 use octocrab::models::repos::Commit;
-use octocrab::models::repos::Commit;
 use prelude::*;
 
 #[tokio::main]
