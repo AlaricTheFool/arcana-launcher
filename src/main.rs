@@ -19,6 +19,8 @@ mod prelude {
     pub use std::sync::{Arc, Mutex};
 }
 
+use octocrab::models::repos::Commit;
+use octocrab::models::repos::Commit;
 use prelude::*;
 
 #[tokio::main]
@@ -48,6 +50,7 @@ type Dstatus = Arc<Mutex<Option<DownloadStatus>>>;
 impl LauncherApp {
     async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let release = Self::get_latest_twelve_knights().await?;
+        let commits = Self::get_twelve_knights_commits().await?;
         Ok(Self {
             latest_twelve_knights: release,
             download_status: Arc::new(Mutex::new(None)),
@@ -62,16 +65,30 @@ impl LauncherApp {
             .await?;
         Ok(release)
     }
+
+    async fn get_twelve_knights_commits() -> Result<Vec<Commit>, Box<dyn std::error::Error>> {
+        Ok(Vec::new())
+    }
 }
 
 impl eframe::App for LauncherApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Welcome!");
+            ui.heading("Arcana Zero");
 
             const BOTTOM_ROW_HEIGHT: f32 = 64.0;
             const BUTTON_WIDTH: f32 = 128.0;
             let download_status = self.download_status.clone();
+
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.heading("Latest Commits for\nTwelve Knight's Vigil");
+                    ui.label("Test");
+                    ui.label("Test");
+                    ui.label("Test");
+                    ui.label("Test");
+                });
+            });
 
             ui.add_space(ui.available_height() - BOTTOM_ROW_HEIGHT);
 
