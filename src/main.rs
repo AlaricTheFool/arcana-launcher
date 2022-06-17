@@ -1,7 +1,12 @@
+mod feedback;
 mod file_management;
+mod product;
 
 mod prelude {
+    pub use crate::feedback::*;
     pub use crate::file_management::*;
+    pub use crate::product::*;
+
     pub use eframe::egui;
     pub use futures_util::StreamExt;
     pub use log::{error, info, trace, warn};
@@ -29,12 +34,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let options = eframe::NativeOptions::default();
 
     let mut app = LauncherApp::new().await?;
-
-    eframe::run_native("Arcana Launcher", options, Box::new(|_cc| Box::new(app)));
+    eframe::run_native(
+        "Arcana Launcher",
+        options,
+        Box::new(|cc| {
+            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            Box::new(app)
+        }),
+    );
 }
 
 struct LauncherApp {
     latest_twelve_knights: Release,
+    feedback: Feedback,
     download_status: Arc<Mutex<Option<DownloadStatus>>>,
 }
 
@@ -52,6 +64,7 @@ impl LauncherApp {
         let commits = Self::get_twelve_knights_commits().await?;
         Ok(Self {
             latest_twelve_knights: release,
+            feedback: Feedback::empty(),
             download_status: Arc::new(Mutex::new(None)),
         })
     }
@@ -80,12 +93,8 @@ impl eframe::App for LauncherApp {
             let download_status = self.download_status.clone();
 
             ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.heading("Latest Commits for\nTwelve Knight's Vigil");
-                    ui.label("Test");
-                    ui.label("Test");
-                    ui.label("Test");
-                    ui.label("Test");
+                ui.vertical(|mut ui| {
+                    self.draw_feedback_widget(&mut ui);
                 });
             });
 
