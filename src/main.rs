@@ -87,19 +87,26 @@ impl eframe::App for LauncherApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Arcana Zero");
+            ui.separator();
 
             const BOTTOM_ROW_HEIGHT: f32 = 64.0;
             const BUTTON_WIDTH: f32 = 128.0;
             let download_status = self.download_status.clone();
 
+            let midsection_height = ui.available_height() - BOTTOM_ROW_HEIGHT;
             ui.horizontal(|ui| {
-                ui.vertical(|mut ui| {
-                    self.draw_feedback_widget(&mut ui);
+                ui.set_height(midsection_height);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.vertical(|mut ui| {
+                        self.draw_feedback_widget(&mut ui);
+                    });
                 });
+
+                ui.separator();
             });
+            ui.separator();
 
-            ui.add_space(ui.available_height() - BOTTOM_ROW_HEIGHT);
-
+            let remaining_height = ui.available_height();
             ui.with_layout(egui::Layout::right_to_left(), |ui| {
                 let file_exists =
                     std::path::Path::new(&get_os_executable("twelve-knights-vigil".to_string()))
@@ -107,9 +114,11 @@ impl eframe::App for LauncherApp {
                 ui.add_enabled_ui(
                     file_exists && *download_status.lock().unwrap() == None,
                     |ui| {
-                        let play_button = egui::Button::new("Play");
+                        let play_text =
+                            egui::RichText::new("               Play\nTwelve Knight's Vigil");
+                        let play_button = egui::Button::new(play_text);
                         if ui
-                            .add_sized([BUTTON_WIDTH, BOTTOM_ROW_HEIGHT], play_button)
+                            .add_sized([BUTTON_WIDTH, remaining_height], play_button)
                             .clicked()
                         {
                             let working_dir =
@@ -135,7 +144,7 @@ impl eframe::App for LauncherApp {
                     };
                     let download_button = egui::Button::new(button_text);
                     if ui
-                        .add_sized([BUTTON_WIDTH, BOTTOM_ROW_HEIGHT], download_button)
+                        .add_sized([BUTTON_WIDTH, remaining_height], download_button)
                         .clicked()
                     {
                         trace!("Finding correct download link.");
@@ -164,10 +173,22 @@ impl eframe::App for LauncherApp {
 
                 match current_status {
                     None => {
-                        ui.label(format!(
-                            "Last Update: {}",
-                            self.latest_twelve_knights.published_at.unwrap()
-                        ));
+                        let now = std::time::SystemTime::now();
+                        let datetime_now: chrono::DateTime<chrono::offset::Utc> =
+                            chrono::DateTime::from(now);
+                        let difference = datetime_now.signed_duration_since(
+                            self.latest_twelve_knights.published_at.unwrap(),
+                        );
+                        let time_ago = if difference.num_days() > 0 {
+                            format!("{} days ago", difference.num_days())
+                        } else if difference.num_hours() > 0 {
+                            format!("{} hours ago", difference.num_hours())
+                        } else if difference.num_minutes() > 0 {
+                            format!("{} minutes ago", difference.num_minutes())
+                        } else {
+                            format!("{} seconds ago", difference.num_seconds())
+                        };
+                        ui.label(format!("Last Update Released: {time_ago}"));
                     }
 
                     Some(status) => match status {
